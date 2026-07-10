@@ -1,0 +1,314 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#2563EB">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="description" content="药品信息查询平台 - 医药代表专业工具">
+  <title>海鲸药品信息查询</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/vue.global.prod.js"></script>
+  <script src="js/fuse.basic.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="app-header" :class="{ 'with-shadow': hasScroll }">
+      <div class="header-inner">
+        <button v-if="currentRoute !== 'home'" class="btn-icon" @click="goBack">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <h1 class="header-title">{{ pageTitle }}</h1>
+        <button v-if="currentRoute === 'home'" class="btn-icon" @click="toggleChat">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><text x="12" y="15.5" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor" stroke="none">AI</text></svg>
+        </button>
+        <div v-else style="width:24px"></div>
+      </div>
+    </header
+
+
+    <main class="main-content" :class="{ 'has-search': showSearch }">
+      <div v-if="currentRoute === 'home'" class="page-home">
+        <section class="section">
+          <h2 class="section-title">药品分类</h2>
+          <div class="category-grid">
+            <div class="category-card" v-for="cat in categories" :key="cat.name" @click="filterByCategory(cat.name)">
+              <span class="category-icon">{{ cat.icon }}</span>
+              <span class="category-name">{{ cat.name }}</span>
+              <span class="category-count">{{ cat.count }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">{{ activeCategory === '全部' ? '全部药品' : activeCategory }}</h2>
+          <div class="drug-list">
+            <div class="drug-card" v-for="drug in filteredDrugs" :key="drug.id" @click="viewDrug(drug.id)">
+              <div class="drug-card-header">
+                <span class="drug-card-manufacturer">{{ drug.manufacturer }}</span>
+                <span class="drug-card-tag">{{ drug.category }}</span>
+              </div>
+              <h3 class="drug-card-name">{{ drug.name }}</h3>
+              <p class="drug-card-generic">{{ drug.genericName }} / {{ drug.enName }}</p>
+              <div class="drug-card-info">
+                <span>{{ drug.specification }}</span>
+                <span class="dot">·</span>
+                <span>{{ drug.drugCode }}</span>
+              </div>
+              <p class="drug-card-summary">{{ drug.summary }}</p>
+              <div class="drug-card-footer">
+                <span class="drug-card-sections">
+                  <span v-for="(sec, key) in drug.sections" :key="key" class="section-badge">{{ sec.icon }}</span>
+                </span>
+                <span class="drug-card-arrow">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div v-if="currentRoute === 'detail'" class="page-detail">
+        <div class="detail-hero">
+          <div class="detail-hero-info">
+            <h2 class="detail-drug-name">{{ currentDrug.name }}</h2>
+            <p class="detail-drug-sub">{{ currentDrug.genericName }} / {{ currentDrug.enName }}</p>
+            <div class="detail-tags">
+              <span class="detail-tag detail-tag-blue">{{ currentDrug.category }}</span>
+              <span class="detail-tag detail-tag-green">{{ currentDrug.drugCode }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-tabs">
+          <div class="section-tabs-scroll">
+            <button v-for="(sec, key) in currentDrug.sections" :key="key" class="section-tab" :class="{ active: activeSection === key }" @click="activeSection = key; scrollToTop()">
+              <span class="tab-icon">{{ sec.icon }}</span>
+              <span class="tab-label">{{ sec.title }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="detail-content">
+          <div v-if="currentSectionObj" class="content-body">
+            <template v-if="typeof currentSectionObj.content === 'object'">
+              <div class="content-block" v-for="(block, bKey) in currentSectionObj.content" :key="bKey">
+                <h3 class="content-block-title">{{ block.title }}</h3>
+                <div class="content-block-body" v-html="renderMarkdown(block.body)"></div>
+              </div>
+            </template>
+            <div v-else class="content-block">
+              <div class="content-block-body" v-html="renderMarkdown(currentSectionObj.content)"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- AI Chat Page -->
+    <div v-if="currentRoute === 'chat'" class="page-chat">
+      <!-- API Key 设置条 -->
+      <div class="chat-api-bar" v-if="!apiKeySet">
+        <input v-model="apiKeyInput" type="password" class="chat-api-input" placeholder="输入你的 DeepSeek API Key..." />
+        <button class="chat-api-btn" @click="saveApiKey">确认</button>
+        <div class="chat-api-hint">复制粘贴 sk-5fb742f828014873812deca848480bba 进行使用</div>
+      </div>
+      <div class="chat-api-info" v-if="apiKeySet">
+        <span class="chat-api-dot"></span> API 已连接
+        <span class="chat-api-change" @click="changeApiKey">更换</span>
+      </div>
+
+      <div class="chat-messages" ref="chatContainer">
+        <div v-for="(msg, i) in chatMessages" :key="i" class="chat-msg" :class="'chat-' + msg.role">
+          <div class="chat-bubble">
+            <div class="chat-text" v-html="renderMarkdown(msg.text)"></div>
+            <div class="chat-time">{{ msg.time }}</div>
+          </div>
+        </div>
+        <div v-if="isThinking" class="chat-msg chat-assistant">
+          <div class="chat-bubble chat-thinking-bubble">
+            <div class="chat-thinking-dots"><span>.</span><span>.</span><span>.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-bar">
+        <input v-model="chatInput" type="text" class="chat-input" placeholder="输入你的问题..." @keyup.enter="sendMessage" :disabled="isThinking || !apiKeySet" />
+        <button class="chat-mic-btn" @click="startVoice" :class="{ recording: isRecording }">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3" ry="3"></rect><path d="M5 10a7 7 0 0 0 14 0"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+        </button>
+        <button class="chat-send-btn" @click="sendMessage" :disabled="isThinking || !chatInput.trim() || !apiKeySet">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        </button>
+      </div>
+    </div>
+
+    <transition name="fade">
+      <div class="toast" v-if="toast.show">{{ toast.message }}</div>
+    </transition>
+    <div class="bottom-safe"></div>
+  </div>
+
+  <script>
+    const APP_CONFIG = { basePath: '', dataUrl: 'data/drugs.json' };
+  </script>
+  <script>const INLINE_DRUG_DATA = [{
+    "id":  "vitamin-d2",
+    "name":  "维生素D2软胶囊（5000单位）",
+    "genericName":  "维生素D2",
+    "enName":  "Vitamin D2 Soft Capsules",
+    "category":  "维生素类药",
+    "category2":  "维生素/矿物质",
+    "manufacturer":  "南京海鲸药业股份有限公司",
+    "specification":  "0.125mg（5000单位）",
+    "approvalNumber":  "国药准字H32023837",
+    "drugCode":  "医保乙类",
+    "summary":  "维生素D2能促进小肠对钙的吸收及肾小管重吸收磷，提高血钙、血磷浓度，促进骨钙化。用于维生素D缺乏症的预防与治疗、慢性低钙血症、佝偻病、骨软化症、甲状旁腺功能低下等。南京海鲸药业生产，国药准字H32023837。",
+    "sections":  {
+                     "prescribing_info":  {
+                                              "title":  "说明书",
+                                              "icon":  "📋",
+                                              "content":  {
+                                                              "ingredients":  {
+                                                                                  "title":  "成份",
+                                                                                  "body":  "本品主要成份为维生素D2。\\n化学名称：9.10-开环麦角甾-5.7.10（19），22-四烯-3β-醇。\\n分子式：C28H44O\\n分子量：396.66"
+                                                                              },
+                                                              "description":  {
+                                                                                  "title":  "性状",
+                                                                                  "body":  "本品内容物为淡黄色至黄色油状液体。"
+                                                                              },
+                                                              "indications":  {
+                                                                                  "title":  "适应症",
+                                                                                  "body":  "1. 用于维生素D缺乏症的预防与治疗。如：绝对素食者、肠外营养病人、胰腺功能不全伴吸收不良综合征、肝胆疾病（肝功能损害、肝硬化、阻塞性黄疸）、小肠疾病（脂性腹泻、局限性肠炎、长期腹泻）、胃切除等。\\n2. 用于慢性低钙血症、低磷血症、佝偻病及伴有慢性肾功能不全的骨软化症、家族性低磷血症及甲状旁腺功能低下（术后、特发性或假性甲状旁腺功能低下）的治疗。\\n3. 用于治疗急、慢性及潜在手术后手足抽搐症及特发性手足搐搦症。"
+                                                                              },
+                                                              "specification":  {
+                                                                                    "title":  "规格",
+                                                                                    "body":  "0.125mg（5000单位）"
+                                                                                },
+                                                              "dosage":  {
+                                                                             "title":  "用法用量",
+                                                                             "body":  "**维生素D缺乏**：\\n- 成人：口服每日0.025~0.05mg（1000~2000单位），以后减至每日0.01mg（400单位）\\n- 儿童：每日0.025~0.1mg（1000~4000单位），以后减至每日0.01mg（400单位）\\n\\n**预防维生素D缺乏症**：\\n- 成人：口服每日0.01~0.02mg（400~800单位）\\n- 早产儿/双胎/人工喂养婴儿：出生后1~3周起每日口服0.0125~0.025mg（500~1000单位）\\n- 母乳喂养婴儿：每日0.01mg（400单位）\\n\\n**甲状旁腺功能低下**：\\n- 成人：口服每日1.25~3.75mg（5~15万单位）\\n- 小儿：1.25~5mg（5~20万单位）\\n\\n**肾功能不全**：\\n- 成人：口服每日1~2.5mg（4~10万单位）\\n\\n**肾性骨萎缩**：\\n- 成人：开始剂量每日0.5mg（2万单位），维持量每日0.25~0.75mg（1~3万单位）\\n- 小儿：每日0.1~1mg（4000~4万单位）"
+                                                                         },
+                                                              "adverse_reactions":  {
+                                                                                        "title":  "不良反应",
+                                                                                        "body":  "1. 便秘、腹泻、持续性头痛、食欲减退、口内有金属味、恶心呕吐、口渴、疲乏、无力\\n2. 骨痛、尿混浊、惊厥、高血压、眼对光刺激敏感度增加、心律失常、偶有精神异常、皮肤瘙痒、肌痛、严重腹痛（有时误诊为胰腺炎）、夜间多尿、体重下降\\n\\n维生素D2中毒引起的高钙血症，可引起全身性血管钙化、肾钙质沉淀及其他软组织钙化，致高血压及肾功能衰竭。儿童可致生长停滞。"
+                                                                                    },
+                                                              "contraindications":  {
+                                                                                        "title":  "禁忌",
+                                                                                        "body":  "高血钙症、维生素D增多症、高磷血症伴肾性佝偻病患者禁用。"
+                                                                                    },
+                                                              "warnings":  {
+                                                                               "title":  "注意事项",
+                                                                               "body":  "1. 治疗低钙血症前，应先控制血清磷的浓度，并定期复查血钙等有关指标\\n2. 由于个体差异，用量应依据临床反应作调整\\n3. 对诊断的干扰：维生素D2可促使血清磷酸酶浓度降低，血清钙、胆固醇、磷酸盐和镁的浓度可能升高\\n4. 慎用情况：动脉硬化、心功能不全、高胆固醇血症、高磷血症、对维生素D高度敏感及肾功能不全\\n5. 疗程中应注意检查：血清尿素氮、肌酐和肌酐清除率、血清碱性磷酸酶、血磷、24小时尿钙、血钙等\\n6. 预防和治疗骨质疏松需遵医嘱\\n\\n**孕妇及哺乳期妇女用药**：高钙血症孕妇可伴有对维生素D2敏感，应注意剂量调整。\\n\\n**儿童用药**：婴儿对维生素D2敏感性个体间差异大，血清钙和磷浓度的乘积不得大于58。\\n\\n**老年用药**：未进行该项实验且无可靠参考文献。"
+                                                                           },
+                                                              "drug_interactions":  {
+                                                                                        "title":  "药物相互作用",
+                                                                                        "body":  "1. 制酸药中的镁剂与维生素D同用，可引起高镁血症\\n2. 巴比妥、苯妥英钠、抗惊厥药、扑米酮等可降低维生素D2的效应\\n3. 降钙素与维生素D同用可抵消前者对高钙血症的疗效\\n4. 大剂量钙剂或利尿药与维生素D同用，有发生高钙血症的危险\\n5. 考来烯胺、考来替泊、矿物油、硫酸铝等能减少小肠对维生素D的吸收\\n6. 洋地黄类与维生素D同用时应谨慎，易诱发心律失常\\n7. 大量含磷药物与维生素D同用，可诱发高磷血症"
+                                                                                    },
+                                                              "overdose":  {
+                                                                               "title":  "药物过量",
+                                                                               "body":  "短期内摄入大剂量或长期服用超剂量维生素D2可导致严重中毒反应。\\n\\n维生素D2中毒引起的高钙血症，可引起全身性血管钙化、肾钙质沉淀及其他软组织钙化，致高血压及肾功能衰竭。\\n\\n**治疗**：除停用外，应给以低钙饮食，大量饮水，保持尿液酸性，同时进行对症和支持治疗。高钙血症危象时需静脉给予氯化钠注射液，增加尿钙排出，必要时应用利尿药、皮质激素或降钙素，甚至作血液透析。"
+                                                                           },
+                                                              "storage":  {
+                                                                              "title":  "贮藏",
+                                                                              "body":  "遮光，密封保存。"
+                                                                          },
+                                                              "packaging":  {
+                                                                                "title":  "包装",
+                                                                                "body":  "铝塑包装：3粒/板×1板/盒，5粒/板×1板/盒，10粒/板×1板/盒，10粒/板×2板/盒，10粒/板×3板/盒，10粒/板×4板/盒。"
+                                                                            },
+                                                              "shelf_life":  {
+                                                                                 "title":  "有效期",
+                                                                                 "body":  "24个月"
+                                                                             },
+                                                              "standard":  {
+                                                                               "title":  "执行标准",
+                                                                               "body":  "《中国药典》2020年版第一增补本"
+                                                                           }
+                                                          }
+                                          },
+                     "clinical_data":  {
+                                           "title":  "药理临床数据",
+                                           "icon":  "🔬",
+                                           "content":  {
+                                                           "pharmacology":  {
+                                                                                "title":  "药理作用",
+                                                                                "body":  "本品为维生素类药。维生素D2促进小肠黏膜刷状缘对钙的吸收及肾小管重吸收磷，提高血钙、血磷浓度，协同甲状旁腺激素、降钙素，促进旧骨释放磷酸钙，维持及调节血浆钙、磷正常浓度。维生素D2促使钙沉着于新骨形成部位，使枸橼酸盐在骨中沉积，促进骨钙化及成骨细胞功能和骨样组织成熟。\\n\\n维生素D2摄入后，在细胞微粒体中受25-羟化酶系统催化生成骨化二醇（25-OHD），经肾近曲小管细胞1-羟化酶系统催化，生成具有生物活性的骨化三醇[1-25-(OH)2D3]。"
+                                                                            },
+                                                           "pharmacokinetics":  {
+                                                                                    "title":  "药代动力学",
+                                                                                    "body":  "由小肠吸收，其吸收需胆盐与特殊α-球蛋白结合后转运到身体其他部位，贮存于肝和脂肪。代谢、活化首先通过肝脏，其次为肾脏。\\n\\n**作用开始时间**：12~24小时\\n**治疗效应**：需10~14天\\n**半衰期（t1/2）**：19~48小时\\n在脂肪组织内可长期贮存。作用持续时间最长达6个月，重复给药有累积作用。"
+                                                                                }
+                                                       }
+                                       },
+                     "safety":  {
+                                    "title":  "安全性",
+                                    "icon":  "🛡️",
+                                    "content":  {
+                                                    "adverse_reactions_detail":  {
+                                                                                     "title":  "不良反应详情",
+                                                                                     "body":  "**消化系统**：便秘、腹泻、食欲减退、恶心呕吐、口渴、口内有金属味\\n**神经系统**：持续性头痛、疲乏、无力、惊厥、偶有精神异常\\n**心血管系统**：高血压、心律失常\\n**其他**：骨痛、尿混浊、眼对光刺激敏感度增加、皮肤瘙痒、肌痛、严重腹痛（有时误诊为胰腺炎）、夜间多尿、体重下降\\n\\n**中毒反应**：维生素D2中毒引起的高钙血症，可引起全身性血管钙化、肾钙质沉淀及其他软组织钙化，致高血压及肾功能衰竭。儿童可致生长停滞。"
+                                                                                 },
+                                                    "contraindications_detail":  {
+                                                                                     "title":  "禁忌人群",
+                                                                                     "body":  "1. 高血钙症患者\\n2. 维生素D增多症患者\\n3. 高磷血症伴肾性佝偻病患者"
+                                                                                 },
+                                                    "special_populations":  {
+                                                                                "title":  "特殊人群用药",
+                                                                                "body":  "**孕妇及哺乳期妇女**：高钙血症孕妇可伴有对维生素D2敏感，应注意剂量调整。\\n\\n**儿童**：婴儿对维生素D2敏感性个体间差异大，用量应慎重决定，血清钙和磷浓度的乘积[Ca]×[P]（mg/dl）不得大于58。\\n\\n**老年人**：未进行该项实验且无可靠参考文献。"
+                                                                            }
+                                                }
+                                },
+                     "access_info":  {
+                                         "title":  "准入信息",
+                                         "icon":  "🏛️",
+                                         "content":  {
+                                                         "approval":  {
+                                                                          "title":  "注册信息",
+                                                                          "body":  "**批准文号**：国药准字H32023837\\n**执行标准**：《中国药典》2020年版第一增补本\\n**药品上市许可持有人**：南京海鲸药业股份有限公司\\n**注册地址**：南京市江北新区新科二路23号\\n**生产地址**：南京市江北新区新科二路23号"
+                                                                      },
+                                                         "packaging_info":  {
+                                                                                "title":  "包装规格",
+                                                                                "body":  "铝塑包装：\\n- 3粒/板×1板/盒\\n- 5粒/板×1板/盒\\n- 10粒/板×1板/盒\\n- 10粒/板×2板/盒\\n- 10粒/板×3板/盒\\n- 10粒/板×4板/盒\\n\\n**有效期**：24个月"
+                                                                            }
+                                                     }
+                                     },
+                     "faq":  {
+                                 "title":  "常见FAQ",
+                                 "icon":  "❓",
+                                 "content":  {
+                                                 "faq_1":  {
+                                                               "question":  "维生素D2和维生素D3有什么区别？",
+                                                               "answer":  "维生素D2（麦角钙化醇）来源于植物，维生素D3（胆钙化醇）来源于动物（羊毛脂）及日光照射皮肤合成。两者在体内代谢途径相似，均需经肝脏和肾脏羟化生成活性形式。D3的生物活性略高于D2，但D2在临床使用中同样有效，两者均为维生素D的常用补充剂。"
+                                                           },
+                                                 "faq_2":  {
+                                                               "question":  "维生素D2软胶囊每天吃多少？",
+                                                               "answer":  "维生素D缺乏者：成人每日0.025~0.05mg（1000~2000单位），后减至维持量每日0.01mg（400单位）。预防缺乏：成人每日0.01~0.02mg（400~800单位）。具体用量应根据个体情况和医生建议调整，请勿自行超量服用。"
+                                                           },
+                                                 "faq_3":  {
+                                                               "question":  "维生素D2过量会有什么后果？",
+                                                               "answer":  "短期内摄入大剂量或长期服用超剂量维生素D2可导致严重中毒反应，主要表现为高钙血症。高钙血症可引起全身性血管钙化、肾钙质沉淀及其他软组织钙化，导致高血压及肾功能衰竭。一旦发现过量应立即停药，就医处理。"
+                                                           },
+                                                 "faq_4":  {
+                                                               "question":  "维生素D2需要随餐服用吗？",
+                                                               "answer":  "维生素D2是脂溶性维生素，随餐（尤其是含脂肪的食物）服用可提高吸收率。建议在每日主餐时服用，以达到最佳吸收效果。"
+                                                           }
+                                             }
+                             }
+                 }
+}]</script>
+  <script src="js/app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

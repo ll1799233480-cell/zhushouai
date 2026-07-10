@@ -1,0 +1,21 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>测试</title>
+</head>
+<body>
+  <div id="app">{{ message }}</div>
+  <script src="js/vue.global.prod.js"></script>
+  <script>
+    const { createApp, ref } = Vue;
+    const app = createApp({
+      setup() {
+        const message = ref("Vue 工作正常！");
+        return { message };
+      }
+    });
+    app.mount("#app");
+  </script>
+</body>
+</html>
